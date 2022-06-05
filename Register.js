@@ -1,96 +1,57 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import "../App.css";
+const express = require("express");
+const router = express.Router();
+const multer = require("multer");
+const userModel = require("../modules/users");
+const cloudinary = require("cloudinary").v2;
+router.use(express.json());
+router.use(express.urlencoded());
 
-export const Register = () => {
-  const navigate = useNavigate();
-  const [firstname, setFirstname] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmpw, setConfirmpw] = useState("");
-  const [photo, setPhoto] = useState("");
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "/tmp");
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, file.fieldname + "-" + uniqueSuffix);
+    // cb(null, Date.now() + path.extname(file.originalname));
+  },
+});
 
-  const handlesubmit = async (e) => {
-    e.preventDefault();
-    const formData = new FormData();
-    formData.append("firstname", firstname);
-    formData.append("username", username);
-    formData.append("password", password);
-    formData.append("confirmpw", confirmpw);
-    formData.append("photo", photo);
+const upload = multer({ storage: storage });
 
-    if (password === confirmpw) {
-      await axios
-        .post("http://localhost:8000/register", formData)
-        .then((datasent) => {
-          console.log(datasent);
-          navigate(`/`);
-          alert("Success logging in");
-        })
-        .catch((err) => {
-          console.log(err);
+cloudinary.config({
+  cloud_name: "dwcwvb1b9",
+  api_key: "682696957784898",
+  api_secret: "yf1EV3PQ_mc1l3VM2QdABvHG1Vs",
+});
+
+router.post("/", upload.single("photo"), (req, res, next) => {
+  const photo = req.file.path;
+  const password = req.body.password;
+  const confirmpw = req.body.confirmpw;
+
+  if (password === confirmpw) {
+    cloudinary.uploader.upload(
+      photo,
+      { upload_preset: "image_upload" },
+      async function (error, result) {
+        console.log(result, error);
+
+        const newUser = new userModel({
+          firstname: req.body.firstname,
+          username: req.body.username,
+          password: password,
+          confirmpw: confirmpw,
+          photo: result.url,
         });
-    } else {
-      alert("check confirm password");
-    }
-  };
+        await newUser.save((err, result) => {
+          res.status(201).json({ message: "You are registered" });
+        });
+      }
+    );
+  } else {
+    res.status(403).json({ error: "check confirm password again" });
+  }
+});
 
-  return (
-    <>
-      <form
-        className="register-form"
-        onSubmit={handlesubmit}
-        encType="multipart/form-data"
-      >
-        <input
-          type="file"
-          name="photo"
-          accept=".jpg"
-          placeholder="upload your image"
-          onChange={(e) => {
-            const file = e.target.files[0];
-            setPhoto(file);
-          }}
-        ></input>
-        <input
-          type="text"
-          name="firstname"
-          placeholder="type firstname"
-          value={firstname}
-          onChange={(e) => {
-            setFirstname(e.target.value);
-          }}
-        ></input>
-        <input
-          type="text"
-          name="username"
-          placeholder="type username"
-          value={username}
-          onChange={(e) => {
-            setUsername(e.target.value);
-          }}
-        ></input>
-        <input
-          type="password"
-          name="password"
-          placeholder="type password"
-          onChange={(e) => {
-            setPassword(e.target.value);
-          }}
-          value={password}
-        ></input>
-        <input
-          type="password"
-          name="cpassword"
-          placeholder="confirm password"
-          onChange={(e) => {
-            setConfirmpw(e.target.value);
-          }}
-          value={confirmpw}
-        ></input>
-        <button type="submit">Register</button>
-      </form>
-    </>
-  );
-};
+module.exports = router;
